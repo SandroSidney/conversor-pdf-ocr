@@ -19,6 +19,6 @@ python -m venv .venv
 # 3. Instalar as bibliotecas
     *Biblioteca OCRmyPDF converter PDF digitalizado em PDF pesquisável*
 	
-# pip install ocrmypdf os
+pip install ocrmypdf os
 
 ```
