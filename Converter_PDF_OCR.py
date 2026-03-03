@@ -1,13 +1,6 @@
 # Ler PDF não pesquisavel para pesquisavel.
-# Ativar ambiente virtual
-# python -m venv .venv
-# Alterar para o diretório do ambiente virtual
-# .venv\Scripts\activate (Windows)
-# Instalar Biblioteca OCRmyPDF para converter PDF digitalizado em PDF pesquisável
-# pip install ocrmypdf
 
-
-import ocrmypdf
+import ocrmypdf     # converter PDF digitalizado em PDF pesquisável
 import os
 
 
