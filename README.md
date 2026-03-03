@@ -1,4 +1,4 @@
 **Converter PDFs para pesquisavel**
  
-Tem objetivo em transformar arquivos PDF não pesquisavel para pesquisavel. 
-Utilizando App OCR.
+Transformar arquivos PDF não pesquisavel para pesquisavel. É utilizado dois apps para passar o OCR.
+
