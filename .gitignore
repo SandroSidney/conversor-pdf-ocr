@@ -1,0 +1,35 @@
+# ─── Python ───────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# ─── Ambiente virtual ─────────────────────────────────────
+.venv/
+venv/
+env/
+ENV/
+
+# ─── PDF (em qualquer pasta, inclusive docs/) ─────────────
+*.pdf
+
+# ─── Ferramentas de desenvolvimento ───────────────────────
+.vscode/
+.idea/
+.claude/
+*.swp
+*.swo
+
+# ─── Sistema operacional ──────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ─── Logs ─────────────────────────────────────────────────
+*.log
