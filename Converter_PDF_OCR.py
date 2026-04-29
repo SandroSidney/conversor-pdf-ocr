@@ -98,12 +98,11 @@ def selecionar_arquivo() -> Path | None:
 
 # ── Caminho de saída ───────────────────────────────────────────────────────────
 def gerar_caminho_saida(entrada: Path) -> Path:
-    """Gera o caminho de saída em output/. Adiciona timestamp se já existir."""
-    candidato = PASTA_OUTPUT / f"{entrada.stem}_Pesquisavel{entrada.suffix}"
+    """Gera o caminho de saída na mesma pasta do arquivo original. Adiciona timestamp se já existir."""
+    candidato = entrada.parent / f"{entrada.stem}_Pesquisavel{entrada.suffix}"
     if candidato.exists():
         ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-        candidato = PASTA_OUTPUT / \
-            f"{entrada.stem}_Pesquisavel_{ts}{entrada.suffix}"
+        candidato = entrada.parent / f"{entrada.stem}_Pesquisavel_{ts}{entrada.suffix}"
     return candidato
 
 
