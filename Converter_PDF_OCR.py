@@ -174,6 +174,7 @@ def executar_ocr(entrada: Path, saida: Path) -> tuple[bool, str | None, float]:
             ocrmypdf.ocr(
                 str(entrada),
                 str(saida),
+                language="por",
                 deskew=True,
                 force_ocr=True,
                 optimize=1,
