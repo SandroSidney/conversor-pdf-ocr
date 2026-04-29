@@ -181,6 +181,23 @@ def executar_ocr(entrada: Path, saida: Path) -> tuple[bool, str | None, float]:
                 progress_bar=False,
             )
             sucesso = True
+        except ocrmypdf.exceptions.PriorOcrFoundError:
+            # PDF já possui camada de texto — reprocessa sem force_ocr
+            logger.warning("OCR anterior detectado. Reprocessando com skip_text...")
+            try:
+                ocrmypdf.ocr(
+                    str(entrada),
+                    str(saida),
+                    language="por",
+                    deskew=True,
+                    skip_text=True,
+                    optimize=1,
+                    output_type="pdf",
+                    progress_bar=False,
+                )
+                sucesso = True
+            except Exception as e2:
+                erro = str(e2)
         except Exception as e:
             erro = str(e)
 
@@ -266,6 +283,22 @@ def main():
         return
 
     saida = gerar_caminho_saida(entrada)
+
+    # Confirmação antes de processar
+    root = tk.Tk()
+    root.withdraw()
+    root.attributes("-topmost", True)
+    confirmar = messagebox.askyesno(
+        "Confirmar conversão",
+        f"Arquivo selecionado:\n{entrada.name}\n\n"
+        f"O PDF pesquisável será salvo em:\n{saida.parent}\n\n"
+        "Deseja continuar?",
+    )
+    root.destroy()
+
+    if not confirmar:
+        logger.info("Processamento cancelado pelo usuário.")
+        return
 
     logger.info("Iniciando conversão")
     logger.info("  Entrada : %s", entrada)
