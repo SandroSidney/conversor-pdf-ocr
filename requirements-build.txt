@@ -1,0 +1,5 @@
+# Dependência para gerar o executável (.exe) — não é necessária para rodar via `python`.
+# Para instalar: pip install -r requirements-build.txt
+# Para gerar o executável: pyinstaller ConversorPDFOCR.spec
+
+pyinstaller==6.22.2

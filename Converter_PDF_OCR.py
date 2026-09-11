@@ -1,13 +1,7 @@
 """
 Converter_PDF_OCR.py
 --------------------
-Converte PDFs digitalizados em PDFs pesquisáveis via OCR (Tesseract + Ghostscript).
-
-Fluxo:
-    1. Seleção do PDF via janela gráfica
-    2. Conversão com barra de progresso
-    3. Arquivo salvo em output/
-    4. Relatório exibido na tela e salvo em output/relatorios/
+Interface gráfica para converter PDFs digitalizados em PDFs pesquisáveis via OCR (Tesseract + Ghostscript).
 
 Dependências:
     - ocrmypdf  (pip install ocrmypdf)
@@ -18,6 +12,7 @@ Dependências:
 import json
 import logging
 import os
+import sys
 import threading
 import time
 import tkinter as tk
@@ -28,7 +23,9 @@ from tkinter import filedialog, messagebox, ttk
 import ocrmypdf
 
 # ── Pastas de saída ────────────────────────────────────────────────────────────
-PASTA_RAIZ = Path(__file__).parent
+# Path(__file__) aponta para a pasta temporária de extração quando empacotado
+# com PyInstaller (--onefile), por isso usamos sys.executable nesse caso.
+PASTA_RAIZ = Path(sys.executable).parent if getattr(sys, "frozen", False) else Path(__file__).parent
 PASTA_OUTPUT = PASTA_RAIZ / "output"
 PASTA_RELATORIOS = PASTA_RAIZ / "output" / "relatorios"
 
@@ -82,136 +79,14 @@ def configurar_ambiente():
             extras) + os.pathsep + os.environ.get("PATH", "")
 
 
-# ── Seleção de arquivo ─────────────────────────────────────────────────────────
-def selecionar_arquivo() -> Path | None:
-    """Abre janela nativa para selecionar um PDF. Retorna o caminho ou None."""
-    root = tk.Tk()
-    root.withdraw()
-    root.attributes("-topmost", True)
-    caminho = filedialog.askopenfilename(
-        title="Selecione o PDF para converter",
-        filetypes=[("Arquivos PDF", "*.pdf")],
-    )
-    root.destroy()
-    return Path(caminho) if caminho else None
-
-
 # ── Caminho de saída ───────────────────────────────────────────────────────────
 def gerar_caminho_saida(entrada: Path) -> Path:
     """Gera o caminho de saída na mesma pasta do arquivo original. Adiciona timestamp se já existir."""
-    candidato = entrada.parent / f"{entrada.stem}_Pesquisavel{entrada.suffix}"
+    candidato = entrada.parent / f"{entrada.stem}_ocr{entrada.suffix}"
     if candidato.exists():
         ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-        candidato = entrada.parent / f"{entrada.stem}_Pesquisavel_{ts}{entrada.suffix}"
+        candidato = entrada.parent / f"{entrada.stem}_ocr_{ts}{entrada.suffix}"
     return candidato
-
-
-# ── Janela de progresso ────────────────────────────────────────────────────────
-class JanelaProgresso:
-    """Barra de progresso indeterminada exibida durante a conversão OCR."""
-
-    def __init__(self, nome_arquivo: str):
-        self.root = tk.Tk()
-        self.root.title("Convertendo PDF...")
-        self.root.resizable(False, False)
-        self.root.attributes("-topmost", True)
-        self.root.protocol("WM_DELETE_WINDOW", lambda: None)
-
-        larg, alt = 440, 150
-        sx = (self.root.winfo_screenwidth() - larg) // 2
-        sy = (self.root.winfo_screenheight() - alt) // 2
-        self.root.geometry(f"{larg}x{alt}+{sx}+{sy}")
-
-        tk.Label(
-            self.root,
-            text="Aplicando OCR — aguarde...",
-            font=("Segoe UI", 10, "bold"),
-        ).pack(pady=(18, 4))
-
-        tk.Label(
-            self.root,
-            text=nome_arquivo,
-            wraplength=420,
-            justify="center",
-            font=("Segoe UI", 9),
-            fg="#555555",
-        ).pack()
-
-        self.barra = ttk.Progressbar(
-            self.root, mode="indeterminate", length=400)
-        self.barra.pack(padx=20, pady=12)
-        self.barra.start(12)
-
-    def atualizar(self):
-        try:
-            self.root.update()
-        except Exception:
-            pass
-
-    def fechar(self):
-        try:
-            self.barra.stop()
-            self.root.destroy()
-        except Exception:
-            pass
-
-
-# ── Conversão OCR ──────────────────────────────────────────────────────────────
-def executar_ocr(entrada: Path, saida: Path) -> tuple[bool, str | None, float]:
-    """
-    Executa ocrmypdf em thread separada para não travar a interface.
-
-    Retorna:
-        (sucesso, mensagem_de_erro, duração_em_segundos)
-    """
-    sucesso = False
-    erro = None
-
-    def _ocr():
-        nonlocal sucesso, erro
-        try:
-            ocrmypdf.ocr(
-                str(entrada),
-                str(saida),
-                language="por",
-                deskew=True,
-                force_ocr=True,
-                optimize=1,
-                output_type="pdf",
-                progress_bar=False,
-            )
-            sucesso = True
-        except ocrmypdf.exceptions.PriorOcrFoundError:
-            # PDF já possui camada de texto — reprocessa sem force_ocr
-            logger.warning("OCR anterior detectado. Reprocessando com skip_text...")
-            try:
-                ocrmypdf.ocr(
-                    str(entrada),
-                    str(saida),
-                    language="por",
-                    deskew=True,
-                    skip_text=True,
-                    optimize=1,
-                    output_type="pdf",
-                    progress_bar=False,
-                )
-                sucesso = True
-            except Exception as e2:
-                erro = str(e2)
-        except Exception as e:
-            erro = str(e)
-
-    thread = threading.Thread(target=_ocr, daemon=True)
-    thread.start()
-
-    janela = JanelaProgresso(entrada.name)
-    inicio = time.time()
-    while thread.is_alive():
-        janela.atualizar()
-        time.sleep(0.05)
-    janela.fechar()
-
-    return sucesso, erro, time.time() - inicio
 
 
 # ── Relatório ──────────────────────────────────────────────────────────────────
@@ -223,8 +98,8 @@ def _formatar_tamanho(bytes_: int) -> str:
     return f"{bytes_ / 1_048_576:.2f} MB"
 
 
-def gerar_relatorio(entrada: Path, saida: Path, duracao: float):
-    """Salva relatório JSON e exibe resumo em messagebox."""
+def salvar_relatorio_json(entrada: Path, saida: Path, duracao: float) -> dict:
+    """Calcula métricas da conversão e salva relatório JSON. Retorna os dados calculados."""
     tam_entrada = entrada.stat().st_size
     tam_saida = saida.stat().st_size
     variacao = (1 - tam_saida / tam_entrada) * 100 if tam_entrada else 0
@@ -246,80 +121,195 @@ def gerar_relatorio(entrada: Path, saida: Path, duracao: float):
     json_path.write_text(json.dumps(
         dados, indent=2, ensure_ascii=False), encoding="utf-8")
     logger.info("Relatorio JSON salvo: %s", json_path)
+    return dados
 
-    sinal = "↓ redução" if variacao >= 0 else "↑ aumento"
-    linha = "─" * 44
 
-    texto = (
-        f"PDF pesquisável gerado com sucesso!\n\n"
-        f"{linha}\n"
-        f"  Arquivo original : {entrada.name}\n"
-        f"  Arquivo gerado   : {saida.name}\n"
-        f"  Pasta de saída   : output/\n"
-        f"{linha}\n"
-        f"  Tamanho original : {_formatar_tamanho(tam_entrada)}\n"
-        f"  Tamanho gerado   : {_formatar_tamanho(tam_saida)}\n"
-        f"  Variação         : {sinal} de {abs(variacao):.1f}%\n"
-        f"  Tempo de processo: {duracao:.1f}s\n"
-        f"  Data / hora      : {timestamp}\n"
-        f"{linha}\n"
-        f"  Relatório salvo em: output/relatorios/"
-    )
+# ── Interface gráfica ──────────────────────────────────────────────────────────
+class ConversorApp(tk.Tk):
+    """Janela única: selecionar PDF, converter e acompanhar o relatório."""
 
-    root = tk.Tk()
-    root.withdraw()
-    root.attributes("-topmost", True)
-    messagebox.showinfo("Relatório de Conversão", texto)
-    root.destroy()
+    def __init__(self):
+        super().__init__()
+        self.title("Conversor PDF OCR")
+        self.resizable(False, False)
+
+        self.entrada: Path | None = None
+        self.saida: Path | None = None
+        self._thread_resultado: dict = {}
+        self._inicio: float = 0.0
+
+        self._montar_layout()
+        self._centralizar()
+
+    # -- layout -------------------------------------------------------------
+    def _montar_layout(self):
+        pad = {"padx": 16, "pady": 8}
+
+        tk.Label(self, text="Conversor PDF OCR", font=("Segoe UI", 14, "bold")).pack(pady=(16, 0))
+        tk.Label(
+            self,
+            text="Converte PDFs escaneados em PDFs pesquisáveis (idioma: português)",
+            font=("Segoe UI", 9), fg="#555555",
+        ).pack(pady=(0, 12))
+
+        # Seleção de arquivo
+        frame_arquivo = tk.LabelFrame(self, text="Arquivo", font=("Segoe UI", 9, "bold"))
+        frame_arquivo.pack(fill="x", **pad)
+
+        self.var_entrada = tk.StringVar(value="Nenhum arquivo selecionado")
+        tk.Entry(frame_arquivo, textvariable=self.var_entrada, state="readonly", width=58).grid(
+            row=0, column=0, padx=(10, 6), pady=10, sticky="w"
+        )
+        tk.Button(frame_arquivo, text="Selecionar PDF...", command=self._selecionar_arquivo).grid(
+            row=0, column=1, padx=(0, 10), pady=10
+        )
+
+        tk.Label(frame_arquivo, text="Será salvo como:", font=("Segoe UI", 8), fg="#555555").grid(
+            row=1, column=0, sticky="w", padx=10
+        )
+        self.var_saida = tk.StringVar(value="—")
+        tk.Label(frame_arquivo, textvariable=self.var_saida, font=("Segoe UI", 8), fg="#333333").grid(
+            row=2, column=0, columnspan=2, sticky="w", padx=10, pady=(0, 10)
+        )
+
+        # Ação de conversão
+        frame_acao = tk.Frame(self)
+        frame_acao.pack(fill="x", **pad)
+
+        self.btn_converter = tk.Button(
+            frame_acao, text="Converter", state="disabled", width=16,
+            command=self._iniciar_conversao,
+        )
+        self.btn_converter.pack(side="left")
+
+        self.var_status = tk.StringVar(value="Selecione um PDF para começar.")
+        self.lbl_status = tk.Label(frame_acao, textvariable=self.var_status, font=("Segoe UI", 9), fg="#555555")
+        self.lbl_status.pack(side="left", padx=12)
+
+        self.barra = ttk.Progressbar(self, mode="indeterminate", length=460)
+        self.barra.pack(padx=16, pady=(0, 8))
+
+        # Relatório
+        frame_relatorio = tk.LabelFrame(self, text="Relatório da última conversão", font=("Segoe UI", 9, "bold"))
+        frame_relatorio.pack(fill="x", **pad)
+
+        self.var_relatorio = tk.StringVar(value="Nenhuma conversão realizada ainda.")
+        self.lbl_relatorio = tk.Label(
+            frame_relatorio, textvariable=self.var_relatorio, justify="left",
+            font=("Segoe UI", 9), fg="#333333", anchor="w",
+        )
+        self.lbl_relatorio.pack(fill="x", padx=10, pady=10)
+
+    def _centralizar(self):
+        self.update_idletasks()
+        larg, alt = self.winfo_width(), self.winfo_height()
+        sx = (self.winfo_screenwidth() - larg) // 2
+        sy = (self.winfo_screenheight() - alt) // 2
+        self.geometry(f"+{sx}+{sy}")
+
+    # -- seleção de arquivo ---------------------------------------------------
+    def _selecionar_arquivo(self):
+        caminho = filedialog.askopenfilename(
+            title="Selecione o PDF para converter",
+            filetypes=[("Arquivos PDF", "*.pdf")],
+        )
+        if not caminho:
+            return
+
+        self.entrada = Path(caminho)
+        self.saida = gerar_caminho_saida(self.entrada)
+
+        self.var_entrada.set(self.entrada.name)
+        self.var_saida.set(str(self.saida))
+        self.lbl_status.config(fg="#555555")
+        self.var_status.set("Pronto para converter.")
+        self.btn_converter.config(state="normal")
+
+    # -- conversão --------------------------------------------------------------
+    def _iniciar_conversao(self):
+        if not self.entrada:
+            return
+
+        self.btn_converter.config(state="disabled")
+        self.lbl_status.config(fg="#555555")
+        self.var_status.set("Aplicando OCR — aguarde...")
+        self.barra.start(12)
+
+        self._thread_resultado = {}
+        self._inicio = time.time()
+        thread = threading.Thread(target=self._executar_ocr, daemon=True)
+        thread.start()
+        self.after(100, self._verificar_thread, thread)
+
+    def _executar_ocr(self):
+        resultado = self._thread_resultado
+        try:
+            # skip_text preserva páginas que já têm texto (sem re-rasterizar) e
+            # aplica OCR apenas nas páginas que ainda são imagem pura.
+            ocrmypdf.ocr(
+                str(self.entrada), str(self.saida),
+                language="por", deskew=True, skip_text=True,
+                optimize=2, output_type="pdf", progress_bar=False,
+            )
+            resultado["sucesso"] = True
+        except Exception as e:
+            resultado["sucesso"] = False
+            resultado["erro"] = str(e)
+
+    def _verificar_thread(self, thread: threading.Thread):
+        if thread.is_alive():
+            self.after(100, self._verificar_thread, thread)
+            return
+
+        self.barra.stop()
+        duracao = time.time() - self._inicio
+
+        if self._thread_resultado.get("sucesso"):
+            self._exibir_sucesso(duracao)
+        else:
+            self._exibir_erro(self._thread_resultado.get("erro", "Erro desconhecido"), duracao)
+
+        self.btn_converter.config(state="normal")
+
+    def _exibir_sucesso(self, duracao: float):
+        dados = salvar_relatorio_json(self.entrada, self.saida, duracao)
+        sinal = "↓ redução" if dados["variacao_percentual"] >= 0 else "↑ aumento"
+
+        texto = (
+            f"Arquivo gerado  : {self.saida.name}\n"
+            f"Tamanho original: {_formatar_tamanho(dados['tamanho_original_bytes'])}    "
+            f"Tamanho gerado: {_formatar_tamanho(dados['tamanho_saida_bytes'])}\n"
+            f"Variação: {sinal} de {abs(dados['variacao_percentual']):.1f}%    "
+            f"Tempo: {duracao:.1f}s\n"
+            f"Data/hora: {dados['timestamp']}"
+        )
+        self.lbl_relatorio.config(fg="#1a7a1a")
+        self.var_relatorio.set(texto)
+
+        self.lbl_status.config(fg="#1a7a1a")
+        self.var_status.set("Conversão concluída com sucesso!")
+        logger.info("Conversao concluida (%.1fs): %s", duracao, self.saida)
+
+    def _exibir_erro(self, erro: str, duracao: float):
+        self.lbl_status.config(fg="#c0392b")
+        self.var_status.set("Falha na conversão.")
+
+        self.lbl_relatorio.config(fg="#c0392b")
+        self.var_relatorio.set(f"Erro: {erro}")
+
+        logger.error("Falha na conversao (%.1fs): %s", duracao, erro)
+        messagebox.showerror(
+            "Erro na conversão",
+            f"Não foi possível processar o arquivo.\n\nErro: {erro}\n\n"
+            "Verifique se Tesseract e Ghostscript estão instalados corretamente.",
+        )
 
 
 # ── Main ───────────────────────────────────────────────────────────────────────
 def main():
     configurar_ambiente()
-
-    entrada = selecionar_arquivo()
-    if not entrada:
-        logger.info("Nenhum arquivo selecionado. Encerrando.")
-        return
-
-    saida = gerar_caminho_saida(entrada)
-
-    # Confirmação antes de processar
-    root = tk.Tk()
-    root.withdraw()
-    root.attributes("-topmost", True)
-    confirmar = messagebox.askyesno(
-        "Confirmar conversão",
-        f"Arquivo selecionado:\n{entrada.name}\n\n"
-        f"O PDF pesquisável será salvo em:\n{saida.parent}\n\n"
-        "Deseja continuar?",
-    )
-    root.destroy()
-
-    if not confirmar:
-        logger.info("Processamento cancelado pelo usuário.")
-        return
-
-    logger.info("Iniciando conversão")
-    logger.info("  Entrada : %s", entrada)
-    logger.info("  Saida   : %s", saida)
-
-    sucesso, erro, duracao = executar_ocr(entrada, saida)
-
-    if sucesso:
-        gerar_relatorio(entrada, saida, duracao)
-    else:
-        logger.error("Falha na conversao (%.1fs): %s", duracao, erro)
-        root = tk.Tk()
-        root.withdraw()
-        root.attributes("-topmost", True)
-        messagebox.showerror(
-            "Erro na conversão",
-            f"Não foi possível processar o arquivo.\n\n"
-            f"Erro: {erro}\n\n"
-            "Verifique se Tesseract e Ghostscript estão instalados corretamente.",
-        )
-        root.destroy()
+    app = ConversorApp()
+    app.mainloop()
 
 
 if __name__ == "__main__":
